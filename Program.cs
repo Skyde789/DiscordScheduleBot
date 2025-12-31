@@ -8,13 +8,17 @@ using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
 using Microsoft.Extensions.Configuration;
 
+
 var config = new ConfigurationBuilder()
     .SetBasePath(AppContext.BaseDirectory)
-    .AddJsonFile("appsettings.json", optional: false)
+    .AddJsonFile("appsettings.json", optional: true)
+    .AddEnvironmentVariables()
     .Build();
 
-string token = config["Discord:Token"] ?? throw new InvalidOperationException("Discord token not configured");
-ulong botID = ulong.Parse(config["Discord:BotId"] ?? throw new InvalidOperationException("Discord botId not configured"));
+string token =
+    config["DISCORD_TOKEN"]
+    ?? config["Discord:Token"]
+    ?? throw new InvalidOperationException("Discord token not configured"); ulong botID = ulong.Parse(config["Discord:BotId"] ?? throw new InvalidOperationException("Discord botId not configured"));
 
 GatewayClient client = new(
     new BotToken(token),
