@@ -18,7 +18,7 @@ var config = new ConfigurationBuilder()
 string token =
     config["DISCORD_TOKEN"]
     ?? config["Discord:Token"]
-    ?? throw new InvalidOperationException("Discord token not configured"); ulong botID = ulong.Parse(config["Discord:BotId"] ?? throw new InvalidOperationException("Discord botId not configured"));
+    ?? throw new InvalidOperationException("Discord token not configured");
 
 GatewayClient client = new(
     new BotToken(token),
