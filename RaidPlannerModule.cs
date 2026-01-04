@@ -23,17 +23,17 @@ namespace FFDiscordBot
             await RaidPlannerController.Cleanup(Context);
         }
 
-        [SlashCommand("thisweek", "Poll for this week using selected days.")]
+        [SlashCommand("thisweek", "!!Only use this when you are late to start the poll!! Poll for this week using selected days.")]
         public async Task PollThisWeek()
         {
-           await RaidPlannerController.GeneratePoll(Context, 0);
+           await RaidPlannerController.GeneratePoll(Context, true);
 
         }
 
         [SlashCommand("nextweek", "Poll for the next week using selected days.")]
         public async Task PollNextWeek()
         {
-            await RaidPlannerController.GeneratePoll(Context, 1);
+            await RaidPlannerController.GeneratePoll(Context, false);
         }
 
         [SlashCommand("dayselect", "Select days for polling")]
@@ -81,13 +81,13 @@ namespace FFDiscordBot
         [ComponentInteraction("this_week_button")]
         public async Task ThisWeekButton()
         {
-            await RaidPlannerController.GeneratePoll(Context, 0);
+            await RaidPlannerController.GeneratePoll(Context, true);
         }
 
         [ComponentInteraction("next_week_button")]
         public async Task NextWeekButton()
         {
-            await RaidPlannerController.GeneratePoll(Context, 1);
+            await RaidPlannerController.GeneratePoll(Context, false);
 
         }
 

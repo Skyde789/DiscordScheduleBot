@@ -32,7 +32,7 @@ namespace FFDiscordBot
         public static ButtonProperties ThisWeekButton => new ButtonProperties(
             customId: "this_week_button",
             label: "Poll this week",
-            style: ButtonStyle.Primary
+            style: ButtonStyle.Secondary
         );
         public static ButtonProperties NextWeekButton => new ButtonProperties(
             customId: "next_week_button",
@@ -40,7 +40,7 @@ namespace FFDiscordBot
             style: ButtonStyle.Primary
         );
 
-        public static async Task GeneratePoll(IInteractionContext Context, int weeksFromNow)
+        public static async Task GeneratePoll(IInteractionContext Context, bool late)
         {
             ulong guildId;
 
@@ -51,7 +51,7 @@ namespace FFDiscordBot
             if (schedule == null || schedule.Count == 0)
                 throw new InvalidOperationException("No days selected for this guild.");
 
-            List<DateTime> dates = DateGenerator.GenerateWeeklyPollDates(schedule, weeksFromNow);
+            List<DateTime> dates = DateGenerator.GenerateDates(schedule, late);
 
             var message = new MessagePollMediaProperties().WithText("Raid days");
 
@@ -138,7 +138,7 @@ namespace FFDiscordBot
         
         public static InteractionMessageProperties GenerateInterface()
         {
-            var actionRow1 = new ActionRowProperties([ThisWeekButton, NextWeekButton]);
+            var actionRow1 = new ActionRowProperties([NextWeekButton, ThisWeekButton]);
             var actionRow2 = new ActionRowProperties([DaySelectButton, CleanUpButton]);
             var actionRow3 = new ActionRowProperties([CloseButton]);
 
