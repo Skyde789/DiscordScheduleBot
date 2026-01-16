@@ -1,6 +1,6 @@
 # Discord Schedule Bot
 
-Created using **NetCord**.
+Created using **NetCord**. This is currently intended for casual FFXIV statics, generating polls from tuesday until the next tuesday.
 
 ## Features
 
@@ -18,3 +18,6 @@ Created using **NetCord**.
 
 - **/nextweek**  
   Creates a poll with valid days for the next week using the selected days.
+
+## TODO:
+Add a feature that allows the user to select the start/end days.
