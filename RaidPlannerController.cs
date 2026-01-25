@@ -1,6 +1,5 @@
 ﻿
 using NetCord;
-using NetCord.Gateway;
 using NetCord.Rest;
 using NetCord.Services;
 using NetCord.Services.ComponentInteractions;
@@ -52,7 +51,7 @@ namespace FFDiscordBot
 
             guildId = (ulong)GetGuildIdFromContext(Context);
 
-            GuildSettings? schedule = Database.Instance!.GetGuildSettings(guildId);
+            GuildSettings? schedule = BotData.Current!.GetGuildSettings(guildId);
 
             if (schedule == null || schedule.SelectedDays.Count == 0)
                 throw new InvalidOperationException("No days selected for this guild.");
@@ -102,7 +101,7 @@ namespace FFDiscordBot
 
         public static InteractionMessageProperties GenerateSelectDaysMessage(ulong guildID)
         {
-            List<DayOfWeek>? currentSelection = Database.Instance!.GetGuildSettings(guildID).SelectedDays;
+            List<DayOfWeek>? currentSelection = BotData.Current!.GetSelectedDays(guildID);
 
             var selectMenu = new StringMenuProperties(
                 customId: "day_menu",
@@ -134,7 +133,7 @@ namespace FFDiscordBot
 
         public static InteractionMessageProperties GeneratePollPeriodMessage(ulong guildID)
         {
-            PollPeriod? pollPeriod = Database.Instance!.GetGuildSettings(guildID).PollPeriod;
+            PollPeriod? pollPeriod = BotData.Current!.GetPollingPeriod(guildID);
 
             var selectMenu = new StringMenuProperties(
                 customId: "polling_period_menu",
@@ -224,21 +223,23 @@ namespace FFDiscordBot
                 Flags = MessageFlags.Ephemeral
             });
         }
-
+    
         public static async Task HandleDaySelect(StringMenuInteractionContext Context)
         {
             ulong guildId = (ulong)GetGuildIdFromContext(Context);
 
-            var selectedValues = Context.Interaction.Data.SelectedValues;
-            List<DayOfWeek> parsedDays = selectedValues.Select(v => (DayOfWeek)int.Parse(v)).ToList();
+            var selectedValues = Context.Interaction.Data.SelectedValues; 
+            List<DayOfWeek> parsedDays = new List<DayOfWeek>();
+            string result = "";
 
-            var settings = Database.Instance.GetGuildSettings(guildId) ?? new GuildSettings();
+            for (int i = 0; i < selectedValues.Count; i++)
+            {
+                parsedDays.Add((DayOfWeek)int.Parse(selectedValues[i]));
 
-            settings.SelectedDays = parsedDays;
+                result += parsedDays[i] + "\n";
+            }
 
-            Database.Instance.ModifyGuildSettings(guildId, settings);
-
-            string result = string.Join("\n", parsedDays);
+            BotData.Current!.ModifySelectedDays(guildId, parsedDays);
 
             var newMessage = GenerateSelectDaysMessage(guildId);
 
@@ -256,27 +257,18 @@ namespace FFDiscordBot
             ulong guildId = (ulong)GetGuildIdFromContext(Context);
 
             var selectedValues = Context.Interaction.Data.SelectedValues;
-            if (selectedValues.Count < 2)
+
+            if(selectedValues.Count == 0)
                 throw new InvalidOperationException("Start/End date is null");
 
             DayOfWeek parsedStartDate = (DayOfWeek)int.Parse(selectedValues[0]);
             DayOfWeek parsedEndDate = (DayOfWeek)int.Parse(selectedValues[1]);
 
-           
-            var settings = Database.Instance.GetGuildSettings(guildId) ?? new GuildSettings();
+            PollPeriod period = new PollPeriod(parsedStartDate, parsedEndDate);
 
-            settings.PollPeriod = new PollPeriod(parsedStartDate, parsedEndDate);
+            string result = "New Period: " + parsedStartDate.ToString() + " - " + parsedEndDate.ToString();
 
-            
-            if (!settings.SelectedDays.Contains(parsedStartDate))
-                settings.SelectedDays.Add(parsedStartDate);
-            if (!settings.SelectedDays.Contains(parsedEndDate))
-                settings.SelectedDays.Add(parsedEndDate);
-
-            
-            Database.Instance.ModifyGuildSettings(guildId, settings);
-
-            string result = $"New Period: {parsedStartDate} - {parsedEndDate}";
+            BotData.Current!.ModifyPollingPeriod(guildId, period);
 
             var newMessage = GeneratePollPeriodMessage(guildId);
 
@@ -289,4 +281,5 @@ namespace FFDiscordBot
             );
         }
     }
+
 }
