@@ -43,7 +43,8 @@ ComponentInteractionService<StringMenuInteractionContext> stringMenuService = ne
 stringMenuService.AddModule<StringMenuModule>();
 /*
 ComponentInteractionService<UserMenuInteractionContext> userMenuService = new();
-userMenuService.AddModule<TestUserMenuModule>();*/
+userMenuService.AddModule<TestUserMenuModule>();
+*/
 
 client.InteractionCreate += async interaction =>
 {
@@ -74,9 +75,21 @@ client.InteractionCreate += async interaction =>
     catch { }
 };
 
-// Register the commands so that you can use them in the Discord client
-await appService.RegisterCommandsAsync(client.Rest, client.Id);
+// Check if we need to fix/initialize the JSON file or not
+client.Ready += async _ =>
+{
+    await foreach (var guild in client.Rest.GetCurrentUserGuildsAsync())
+    {
+        ulong guildId = guild.Id;
+        Console.WriteLine("Checking settings for: " + guildId);
 
+        BotData.Current.InitializeGuild(guildId);
+    }
+
+    await Task.CompletedTask; 
+};
+
+await appService.RegisterCommandsAsync(client.Rest, client.Id);
 
 await client.StartAsync();
 await Task.Delay(-1);
