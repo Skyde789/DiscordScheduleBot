@@ -1,4 +1,5 @@
 ﻿using FFDiscordBot;
+using Microsoft.Extensions.Configuration;
 using NetCord;
 using NetCord.Gateway;
 using NetCord.Logging;
@@ -6,7 +7,7 @@ using NetCord.Rest;
 using NetCord.Services;
 using NetCord.Services.ApplicationCommands;
 using NetCord.Services.ComponentInteractions;
-using Microsoft.Extensions.Configuration;
+using System.Threading.Channels;
 
 
 var config = new ConfigurationBuilder()
@@ -15,13 +16,10 @@ var config = new ConfigurationBuilder()
     .AddEnvironmentVariables()
     .Build();
 
-string token =
-    config["DISCORD_TOKEN"]
-    ?? config["Discord:Token"]
-    ?? throw new InvalidOperationException("Discord token not configured");
+DiscordConfig.Initialize(config);
 
 GatewayClient client = new(
-    new BotToken(token),
+    new BotToken(DiscordConfig.Token),
     new GatewayClientConfiguration
     {
         Logger = new ConsoleLogger(),
@@ -30,8 +28,6 @@ GatewayClient client = new(
                   GatewayIntents.GuildMessageReactions,
     }
 );
-
-BotData.Initialize();
 
 ApplicationCommandService<ApplicationCommandContext> appService = new();
 appService.AddModule<RaidPlannerModule>();
@@ -78,15 +74,28 @@ client.InteractionCreate += async interaction =>
 // Check if we need to fix/initialize the JSON file or not
 client.Ready += async _ =>
 {
+
+    var fetchedMessage = await client.Rest.GetMessageAsync(DiscordConfig.ChannelId, DiscordConfig.MessageId);
+
+    BotData.Initialize(fetchedMessage.Content, client);
+    
     await foreach (var guild in client.Rest.GetCurrentUserGuildsAsync())
     {
         ulong guildId = guild.Id;
+        
         Console.WriteLine("Checking settings for: " + guildId);
 
         BotData.Current.InitializeGuild(guildId);
     }
 
+   
     await Task.CompletedTask; 
+};
+
+client.MessageCreate += message =>
+{
+    Console.WriteLine("Hi from guild: " + message.GuildId + "\nHi from channel: " + message.ChannelId + "\nHi from message: " + message.Id);
+    return default;
 };
 
 await appService.RegisterCommandsAsync(client.Rest, client.Id);

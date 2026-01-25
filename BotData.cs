@@ -1,4 +1,5 @@
-﻿using System.Text.Json;
+﻿using NetCord.Gateway;
+using System.Text.Json;
 public class PollPeriod
 {
     public DayOfWeek Start { get; set; } = DayOfWeek.Tuesday;
@@ -37,7 +38,13 @@ public class BotData
     static string FilePath => Path.Combine(AppContext.BaseDirectory, fileName);
     public Dictionary<ulong, GuildSettings> GuildSchedules { get; set; } = new();
     public static BotData? Current { get; private set; }
-    public static void Initialize() => Current = LoadData();
+
+    private static GatewayClient client;
+    public static void Initialize(string? discordJson, GatewayClient _client)
+    {
+        client = _client;
+        Current = LoadDataFromDiscord(discordJson);
+    }
 
     public List<DayOfWeek>? GetSelectedDays(ulong guildID)
         => Current!.GuildSchedules.TryGetValue(guildID, out var settings)
@@ -69,7 +76,7 @@ public class BotData
                 PollPeriod = new PollPeriod()
             };
             Current.GuildSchedules[guildID] = settings;
-            SaveData();
+            SaveDataToDiscord();
             Console.WriteLine($"Initialized or upgraded guild {guildID} to version {CURRENT_VERSION}");
         }
     }
@@ -82,7 +89,7 @@ public class BotData
         settings.SelectedDays = selectedDays;
         Current.GuildSchedules[guildID] = settings;
 
-        SaveData();
+        SaveDataToDiscord();
     }
 
     public void ModifyPollingPeriod(ulong guildID, PollPeriod period)
@@ -100,28 +107,31 @@ public class BotData
 
         Current.GuildSchedules[guildID] = settings;
 
-        SaveData();
+        SaveDataToDiscord();
     }
 
-    public static void SaveData()
+    public static async Task SaveDataToDiscord()
     {
+        string json;
         lock (_lock)
         {
-            var json = JsonSerializer.Serialize(Current, new JsonSerializerOptions
+            json = JsonSerializer.Serialize(Current, new JsonSerializerOptions
             {
                 WriteIndented = true
             });
-
-            File.WriteAllText(FilePath, json);
         }
+
+        await client.Rest.ModifyMessageAsync(DiscordConfig.ChannelId, DiscordConfig.MessageId, options =>
+        {
+            options.Content = json;
+        });
     }
 
-    public static BotData LoadData()
+    public static BotData LoadDataFromDiscord(string? messageContent)
     {
-        if (!File.Exists(FilePath))
-            return new BotData();
+        if (string.IsNullOrWhiteSpace(messageContent))
+            return new BotData(); // fallback if the message is empty
 
-        var json = File.ReadAllText(FilePath);
-        return JsonSerializer.Deserialize<BotData>(json) ?? new BotData();
+        return JsonSerializer.Deserialize<BotData>(messageContent) ?? new BotData();
     }
 }
