@@ -5,10 +5,7 @@
 ## https://github.com/github/gitignore/blob/main/VisualStudio.gitignore
 ## has more thorough IDE-specific entries.
 ##
-## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignore
-
-# Ignore Heroku Procfile
-Procfile
+## Get latest from https://github.com/github/gitignore/blob/main/Dotnet.gitignores
 
 # Build results
 [Dd]ebug/
