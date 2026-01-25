@@ -14,6 +14,11 @@ namespace FFDiscordBot
             label: "Day Selection",
             style: ButtonStyle.Secondary
         );
+        public static ButtonProperties PollingPeriodButton => new ButtonProperties(
+            customId: "polling_period_selection",
+            label: "Polling Period",
+            style: ButtonStyle.Secondary
+        );
         public static ButtonProperties CleanUpButton => new ButtonProperties(
             customId: "cleanup_button",
             label: "Clean Messages",
@@ -40,18 +45,18 @@ namespace FFDiscordBot
             style: ButtonStyle.Primary
         );
 
-        public static async Task GeneratePoll(IInteractionContext Context, bool late)
+        public static async Task GeneratePoll(IInteractionContext Context, bool thisWeek)
         {
             ulong guildId;
 
             guildId = (ulong)GetGuildIdFromContext(Context);
 
-            List<DayOfWeek>? schedule = BotData.Current!.GetScheduleForGuild(guildId);
+            GuildSettings? schedule = BotData.Current!.GetGuildSettings(guildId);
 
-            if (schedule == null || schedule.Count == 0)
+            if (schedule == null || schedule.SelectedDays.Count == 0)
                 throw new InvalidOperationException("No days selected for this guild.");
 
-            List<DateTime> dates = DateGenerator.GenerateDates(schedule, late);
+            List<DateTime> dates = DateGenerator.GenerateDates(schedule, thisWeek);
 
             var message = new MessagePollMediaProperties().WithText("Raid days");
 
@@ -96,30 +101,62 @@ namespace FFDiscordBot
 
         public static InteractionMessageProperties GenerateSelectDaysMessage(ulong guildID)
         {
-            List<DayOfWeek>? currentSelection = BotData.Current!.GetScheduleForGuild(guildID);
+            List<DayOfWeek>? currentSelection = BotData.Current!.GetSelectedDays(guildID);
 
             var selectMenu = new StringMenuProperties(
                 customId: "day_menu",
                 options:
                 [
-                new StringMenuSelectOptionProperties("Monday",     "1").WithDefault(currentSelection?.Contains(DayOfWeek.Monday)   ?? false),
-                new StringMenuSelectOptionProperties("Tuesday",    "2").WithDefault(currentSelection?.Contains(DayOfWeek.Tuesday)  ?? false),
-                new StringMenuSelectOptionProperties("Wednesday",  "3").WithDefault(currentSelection?.Contains(DayOfWeek.Wednesday)?? false),
-                new StringMenuSelectOptionProperties("Thursday",   "4").WithDefault(currentSelection?.Contains(DayOfWeek.Thursday) ?? false),
-                new StringMenuSelectOptionProperties("Friday",     "5").WithDefault(currentSelection?.Contains(DayOfWeek.Friday)   ?? false),
-                new StringMenuSelectOptionProperties("Saturday",   "6").WithDefault(currentSelection?.Contains(DayOfWeek.Saturday) ?? false),
-                new StringMenuSelectOptionProperties("Sunday",     "0").WithDefault(currentSelection?.Contains(DayOfWeek.Sunday)   ?? false)
+                new StringMenuSelectOptionProperties("Monday",     "1").WithDefault(currentSelection?.Contains(DayOfWeek.Monday)   ?? true),
+                new StringMenuSelectOptionProperties("Tuesday",    "2").WithDefault(currentSelection?.Contains(DayOfWeek.Tuesday)  ?? true),
+                new StringMenuSelectOptionProperties("Wednesday",  "3").WithDefault(currentSelection?.Contains(DayOfWeek.Wednesday)?? true),
+                new StringMenuSelectOptionProperties("Thursday",   "4").WithDefault(currentSelection?.Contains(DayOfWeek.Thursday) ?? true),
+                new StringMenuSelectOptionProperties("Friday",     "5").WithDefault(currentSelection?.Contains(DayOfWeek.Friday)   ?? true),
+                new StringMenuSelectOptionProperties("Saturday",   "6").WithDefault(currentSelection?.Contains(DayOfWeek.Saturday) ?? true),
+                new StringMenuSelectOptionProperties("Sunday",     "0").WithDefault(currentSelection?.Contains(DayOfWeek.Sunday)   ?? true)
             ])
             {
                 Placeholder = "Pick your options",
-                MinValues = 0,  // at least 1 option must be selected
-                MaxValues = 7   // at most 7 options can be selected
+                MinValues = 1,  
+                MaxValues = 7   
             };
 
             var actionRow = new ActionRowProperties([InterfaceButton, CloseButton]);
             var message = new InteractionMessageProperties
             {
                 Content = "Select multiple options (1-7):",
+                Components = [selectMenu, actionRow]
+            };
+
+            return message;
+        }
+
+        public static InteractionMessageProperties GeneratePollPeriodMessage(ulong guildID)
+        {
+            PollPeriod? pollPeriod = BotData.Current!.GetPollingPeriod(guildID);
+
+            var selectMenu = new StringMenuProperties(
+                customId: "polling_period_menu",
+                options:
+                [
+                new StringMenuSelectOptionProperties("Monday",      "1"),
+                new StringMenuSelectOptionProperties("Tuesday",     "2"),
+                new StringMenuSelectOptionProperties("Wednesday",   "3"),
+                new StringMenuSelectOptionProperties("Thursday",    "4"),
+                new StringMenuSelectOptionProperties("Friday",      "5"),
+                new StringMenuSelectOptionProperties("Saturday",    "6"),
+                new StringMenuSelectOptionProperties("Sunday",      "0")
+            ])
+            {
+                Placeholder = $"Current: {pollPeriod.Start.ToString()} - {pollPeriod.End.ToString()}",
+                MinValues = 2,
+                MaxValues = 2
+            };
+
+            var actionRow = new ActionRowProperties([InterfaceButton, CloseButton]);
+            var message = new InteractionMessageProperties
+            {
+                Content = "Select the starting day first, then the end date:",
                 Components = [selectMenu, actionRow]
             };
 
@@ -139,8 +176,8 @@ namespace FFDiscordBot
         public static InteractionMessageProperties GenerateInterface()
         {
             var actionRow1 = new ActionRowProperties([NextWeekButton, ThisWeekButton]);
-            var actionRow2 = new ActionRowProperties([DaySelectButton, CleanUpButton]);
-            var actionRow3 = new ActionRowProperties([CloseButton]);
+            var actionRow2 = new ActionRowProperties([DaySelectButton, PollingPeriodButton]);
+            var actionRow3 = new ActionRowProperties([CloseButton, CleanUpButton]);
 
             var message = new InteractionMessageProperties
             {
@@ -153,10 +190,8 @@ namespace FFDiscordBot
         
         public static async Task Cleanup(dynamic Context)
         {
-            // Defer the response to give time for processing
             await Context.Interaction.SendResponseAsync(InteractionCallback.DeferredMessage(MessageFlags.Ephemeral));
 
-            // Get the current channel
             var channel = Context.Interaction.Channel;
 
             if (channel is not TextChannel textChannel)
@@ -182,7 +217,6 @@ namespace FFDiscordBot
                 await Task.Delay(500);
             }
 
-            // Send ephemeral feedback
             await Context.Interaction.SendFollowupMessageAsync(new InteractionMessageProperties
             {
                 Content = "Bot messages deleted!",
@@ -194,7 +228,7 @@ namespace FFDiscordBot
         {
             ulong guildId = (ulong)GetGuildIdFromContext(Context);
 
-            var selectedValues = Context.Interaction.Data.SelectedValues; // List<string>
+            var selectedValues = Context.Interaction.Data.SelectedValues; 
             List<DayOfWeek> parsedDays = new List<DayOfWeek>();
             string result = "";
 
@@ -205,24 +239,38 @@ namespace FFDiscordBot
                 result += parsedDays[i] + "\n";
             }
 
-            // Disable the menu by rebuilding the component rows
-            var newActionRows = Context.Interaction.Message!.Components
-                .OfType<ActionRowProperties>() // cast to ActionRowProperties
-                .Select(row =>
-                {
-                    var newRow = new ActionRowProperties(row.Components.Select(c =>
-                    {
-                        if (c is StringMenuProperties menu && menu.CustomId == "day_menu")
-                            menu.Disabled = true;
-                        return c;
-                    }).ToArray()
-                    );
-                    return newRow;
-                }).ToArray();
-
-            BotData.Current!.ModifyScheduleForGuild(guildId, parsedDays);
+            BotData.Current!.ModifySelectedDays(guildId, parsedDays);
 
             var newMessage = GenerateSelectDaysMessage(guildId);
+
+            await Context.Interaction.SendResponseAsync(
+                InteractionCallback.ModifyMessage(msg =>
+                {
+                    msg.WithContent($"Selection saved!\n{result}");
+                    msg.Components = newMessage.Components;
+                })
+            );
+        }
+
+        public static async Task HandlePollingPeriodSelect(StringMenuInteractionContext Context)
+        {
+            ulong guildId = (ulong)GetGuildIdFromContext(Context);
+
+            var selectedValues = Context.Interaction.Data.SelectedValues;
+
+            if(selectedValues.Count == 0)
+                throw new InvalidOperationException("Start/End date is null");
+
+            DayOfWeek parsedStartDate = (DayOfWeek)int.Parse(selectedValues[0]);
+            DayOfWeek parsedEndDate = (DayOfWeek)int.Parse(selectedValues[1]);
+
+            PollPeriod period = new PollPeriod(parsedStartDate, parsedEndDate);
+
+            string result = "New Period: " + parsedStartDate.ToString() + " - " + parsedEndDate.ToString();
+
+            BotData.Current!.ModifyPollingPeriod(guildId, period);
+
+            var newMessage = GeneratePollPeriodMessage(guildId);
 
             await Context.Interaction.SendResponseAsync(
                 InteractionCallback.ModifyMessage(msg =>

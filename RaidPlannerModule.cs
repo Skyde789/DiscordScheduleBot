@@ -44,6 +44,14 @@ namespace FFDiscordBot
             await Context.Interaction.SendResponseAsync(InteractionCallback.Message(message));
         }
 
+        [SlashCommand("pollperiod", "Select the start and end date for the polls")]
+        public async Task StartingDaySelectMenu()
+        {
+            var message = RaidPlannerController.GeneratePollPeriodMessage((ulong)Context.Interaction.GuildId);
+
+            await Context.Interaction.SendResponseAsync(InteractionCallback.Message(message));
+        }
+
     }
 
     public class ButtonModule : ComponentInteractionModule<ButtonInteractionContext>
@@ -54,6 +62,21 @@ namespace FFDiscordBot
             ulong guildId = (ulong)RaidPlannerController.GetGuildIdFromContext(Context);
 
             var message = RaidPlannerController.GenerateSelectDaysMessage(guildId);
+
+            await Context.Interaction.SendResponseAsync(
+                InteractionCallback.ModifyMessage(msg =>
+                {
+                    msg.Content = message.Content;
+                    msg.Components = message.Components;
+                })
+            );
+        }
+        [ComponentInteraction("polling_period_selection")]
+        public async Task StartingDaySelectButton()
+        {
+            ulong guildId = (ulong)RaidPlannerController.GetGuildIdFromContext(Context);
+
+            var message = RaidPlannerController.GeneratePollPeriodMessage(guildId);
 
             await Context.Interaction.SendResponseAsync(
                 InteractionCallback.ModifyMessage(msg =>
@@ -110,9 +133,15 @@ namespace FFDiscordBot
     public class StringMenuModule : ComponentInteractionModule<StringMenuInteractionContext>
     {
         [ComponentInteraction("day_menu")]
-        public async Task HandleMultiMenu()
+        public async Task HandleDaySelectMenu()
         {
             await RaidPlannerController.HandleDaySelect(Context);
+        }
+
+        [ComponentInteraction("polling_period_menu")]
+        public async Task HandlePollingPeriodMenu()
+        {
+            await RaidPlannerController.HandlePollingPeriodSelect(Context);
         }
     }
 }
