@@ -49,7 +49,7 @@ namespace FFDiscordBot
         {
             ulong guildId;
 
-            guildId = (ulong)GetGuildIdFromContext(Context);
+            guildId = (ulong)GetGuildIdFromContext(Context)!;
 
             GuildSettings? schedule = BotData.Current!.GetGuildSettings(guildId);
 
@@ -226,7 +226,7 @@ namespace FFDiscordBot
     
         public static async Task HandleDaySelect(StringMenuInteractionContext Context)
         {
-            ulong guildId = (ulong)GetGuildIdFromContext(Context);
+            ulong guildId = (ulong)GetGuildIdFromContext(Context)!;
 
             var selectedValues = Context.Interaction.Data.SelectedValues; 
             List<DayOfWeek> parsedDays = new List<DayOfWeek>();
@@ -239,7 +239,7 @@ namespace FFDiscordBot
                 result += parsedDays[i] + "\n";
             }
 
-            BotData.Current!.ModifySelectedDays(guildId, parsedDays);
+            await BotData.Current!.ModifySelectedDays(guildId, parsedDays);
 
             var newMessage = GenerateSelectDaysMessage(guildId);
 
@@ -254,7 +254,7 @@ namespace FFDiscordBot
 
         public static async Task HandlePollingPeriodSelect(StringMenuInteractionContext Context)
         {
-            ulong guildId = (ulong)GetGuildIdFromContext(Context);
+            ulong guildId = (ulong)GetGuildIdFromContext(Context)!;
 
             var selectedValues = Context.Interaction.Data.SelectedValues;
 
@@ -268,7 +268,7 @@ namespace FFDiscordBot
 
             string result = "New Period: " + parsedStartDate.ToString() + " - " + parsedEndDate.ToString();
 
-            BotData.Current!.ModifyPollingPeriod(guildId, period);
+            await BotData.Current!.ModifyPollingPeriod(guildId, period);
 
             var newMessage = GeneratePollPeriodMessage(guildId);
 

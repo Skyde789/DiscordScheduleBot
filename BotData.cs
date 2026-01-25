@@ -1,4 +1,5 @@
 ﻿using NetCord.Gateway;
+using NetCord.Rest;
 using System.Text.Json;
 public class PollPeriod
 {
@@ -29,39 +30,56 @@ public class GuildSettings
     public PollPeriod PollPeriod { get; set; } = new();
 }
 
+public class GuildRegistry
+{
+    public int Version => BotData.CURRENT_VERSION;
+    public Dictionary<ulong, ulong> GuildLinks { get; set; } = new();
+}
+
 public class BotData
 {
-    public const int CURRENT_VERSION = 1;
+    public const int CURRENT_VERSION = 2;
     const string fileName = "data.json";
 
     private static readonly object _lock = new();
-    static string FilePath => Path.Combine(AppContext.BaseDirectory, fileName);
+
     public Dictionary<ulong, GuildSettings> GuildSchedules { get; set; } = new();
+    public GuildRegistry GuildRegistry { get; set; } = new();
+
     public static BotData? Current { get; private set; }
 
-    private static GatewayClient client;
+    private static GatewayClient? client;
+
     public static void Initialize(string? discordJson, GatewayClient _client)
     {
         client = _client;
-        Current = LoadDataFromDiscord(discordJson);
+        Current = new BotData(); 
+        Current.GuildRegistry = Current.LoadGuildLinks(discordJson);
+        Console.WriteLine("Successfully loaded registry from discord message");
+        foreach (var item in Current.GuildRegistry.GuildLinks)
+        {
+            Console.WriteLine("Guild found: " + item);
+        }
     }
 
     public List<DayOfWeek>? GetSelectedDays(ulong guildID)
         => Current!.GuildSchedules.TryGetValue(guildID, out var settings)
             ? settings.SelectedDays
             : null;
+
     public GuildSettings? GetGuildSettings(ulong guildID)
         => Current!.GuildSchedules.TryGetValue(guildID, out var settings)
             ? settings
             : null;
+
     public PollPeriod GetPollingPeriod(ulong guildID) => Current!.GuildSchedules.TryGetValue(guildID, out var settings)
             ? settings.PollPeriod
             : new PollPeriod(); 
 
-    public void InitializeGuild(ulong guildID)
+    public async Task InitializeGuild(ulong guildID)
     {
-        if (!Current!.GuildSchedules.TryGetValue(guildID, out var settings) ||
-            settings.Version < CURRENT_VERSION)
+        Console.WriteLine("");
+        if (!Current!.GuildSchedules.TryGetValue(guildID, out var settings) || settings.Version < CURRENT_VERSION)
         {
             settings = new GuildSettings
             {
@@ -76,12 +94,12 @@ public class BotData
                 PollPeriod = new PollPeriod()
             };
             Current.GuildSchedules[guildID] = settings;
-            SaveDataToDiscord();
+            await SaveGuildSettings(guildID);
             Console.WriteLine($"Initialized or upgraded guild {guildID} to version {CURRENT_VERSION}");
         }
     }
 
-    public void ModifySelectedDays(ulong guildID, List<DayOfWeek> selectedDays)
+    public async Task ModifySelectedDays(ulong guildID, List<DayOfWeek> selectedDays)
     {
         if (!Current!.GuildSchedules.TryGetValue(guildID, out var settings))
             settings = new GuildSettings();
@@ -89,10 +107,10 @@ public class BotData
         settings.SelectedDays = selectedDays;
         Current.GuildSchedules[guildID] = settings;
 
-        SaveDataToDiscord();
+        await SaveGuildSettings(guildID);
     }
 
-    public void ModifyPollingPeriod(ulong guildID, PollPeriod period)
+    public async Task ModifyPollingPeriod(ulong guildID, PollPeriod period)
     {
         if (!Current!.GuildSchedules.TryGetValue(guildID, out var settings))
             settings = new GuildSettings();
@@ -107,31 +125,103 @@ public class BotData
 
         Current.GuildSchedules[guildID] = settings;
 
-        SaveDataToDiscord();
+        await SaveGuildSettings(guildID);
     }
 
-    public static async Task SaveDataToDiscord()
+    public static async Task SaveGuildRegistry()
     {
         string json;
         lock (_lock)
         {
-            json = JsonSerializer.Serialize(Current, new JsonSerializerOptions
+            json = JsonSerializer.Serialize(Current?.GuildRegistry, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+        }
+        
+        await client!.Rest.ModifyMessageAsync(DiscordConfig.ChannelId, DiscordConfig.MessageId, options =>
+        {
+            options.Content = json;
+        });
+        Console.WriteLine("Successfully saved guild registry\n");
+    }
+
+    public static async Task<RestMessage> HandleMissingSettings(ulong guildId)
+    {
+        Console.WriteLine("Guild settings not found, creating new message");
+        RestMessage message;
+
+        lock (_lock)
+        {
+            message = client!.Rest.SendMessageAsync(DiscordConfig.ChannelId, "placeholder for: " + guildId).GetAwaiter().GetResult();
+            Current!.GuildRegistry.GuildLinks[guildId] = message.Id;
+        }
+
+        await SaveGuildRegistry();
+        Console.WriteLine("Guild settings created.\n");
+
+        return message;
+    }
+
+    public static async Task SaveGuildSettings(ulong guildId)
+    {
+        string json;
+        lock (_lock)
+        {
+            json = JsonSerializer.Serialize(Current!.GuildSchedules[guildId], new JsonSerializerOptions
             {
                 WriteIndented = true
             });
         }
 
-        await client.Rest.ModifyMessageAsync(DiscordConfig.ChannelId, DiscordConfig.MessageId, options =>
+        try
         {
-            options.Content = json;
-        });
+            await client!.Rest.ModifyMessageAsync(DiscordConfig.ChannelId, Current.GuildRegistry.GuildLinks[guildId], options =>
+            {
+                options.Content = json;
+            });
+        }
+        catch
+        {
+            await HandleMissingSettings(guildId);
+            await client!.Rest.ModifyMessageAsync(DiscordConfig.ChannelId, Current.GuildRegistry.GuildLinks[guildId], options =>
+            {
+                options.Content = json;
+            });
+            Console.WriteLine("Recovered missing guild message for " + guildId);
+        }
+
+        Console.WriteLine("Successfully saved guild settings for: " + guildId + "\n");
+    }
+    
+    public GuildRegistry LoadGuildLinks(string? messageContent)
+    {
+        if (string.IsNullOrWhiteSpace(messageContent) && IsValidJson(messageContent))
+            return new GuildRegistry();
+
+        return JsonSerializer.Deserialize<GuildRegistry>(messageContent) ?? new GuildRegistry();
     }
 
-    public static BotData LoadDataFromDiscord(string? messageContent)
+    public void LoadGuildSettingsFromMessage(string? messageContent, ulong guildId)
     {
-        if (string.IsNullOrWhiteSpace(messageContent))
-            return new BotData(); // fallback if the message is empty
+        GuildSettings settings = new GuildSettings();
 
-        return JsonSerializer.Deserialize<BotData>(messageContent) ?? new BotData();
+        if (!string.IsNullOrWhiteSpace(messageContent) && IsValidJson(messageContent))
+            settings = JsonSerializer.Deserialize<GuildSettings>(messageContent);
+
+        GuildSchedules.Add(guildId, settings!);
+    }
+
+    private bool IsValidJson(string s)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(s);
+            return true;
+        }
+        catch
+        {
+            return false;
+        }
     }
 }

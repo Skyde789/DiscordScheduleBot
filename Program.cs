@@ -71,32 +71,61 @@ client.InteractionCreate += async interaction =>
     catch { }
 };
 
-// Check if we need to fix/initialize the JSON file or not
+
+
 client.Ready += async _ =>
 {
 
     var fetchedMessage = await client.Rest.GetMessageAsync(DiscordConfig.ChannelId, DiscordConfig.MessageId);
 
+    /* // Setup from here:
+    await client.Rest.SendMessageAsync(DiscordConfig.ChannelId, "{\r\n  \"Version\": 1,\r\n  \"GuildLinks\": {}\r\n}\r\n");  
+     */
+
+    /* // modify from here:
+    await client.Rest.ModifyMessageAsync(DiscordConfig.ChannelId, DiscordConfig.MessageId, message =>
+    {
+        message.Content = "{\r\n  \"Version\": 1,\r\n  \"GuildLinks\": {}\r\n}\r\n";
+    });
+    */
+
     BotData.Initialize(fetchedMessage.Content, client);
     
     await foreach (var guild in client.Rest.GetCurrentUserGuildsAsync())
     {
-        ulong guildId = guild.Id;
-        
-        Console.WriteLine("Checking settings for: " + guildId);
-
-        BotData.Current.InitializeGuild(guildId);
+        if (!BotData.Current!.GuildRegistry.GuildLinks.ContainsKey(guild.Id))
+        {
+            Console.WriteLine("New guild (" + guild.Id + ") detected.");
+            var newMessage = await client.Rest.SendMessageAsync(DiscordConfig.ChannelId, "placeholder for: " + guild.Id);
+            BotData.Current.GuildRegistry.GuildLinks.Add(guild.Id, newMessage.Id);
+            Console.WriteLine("New guild (" + guild.Id + ") added to registry");
+        }
     }
 
-   
+    await BotData.SaveGuildRegistry();
+
+    foreach (KeyValuePair<ulong, ulong> pair in BotData.Current!.GuildRegistry.GuildLinks)
+    {
+        ulong guildId = pair.Key;
+        ulong messageId = pair.Value;
+
+        try
+        {
+            fetchedMessage = await client.Rest.GetMessageAsync(DiscordConfig.ChannelId, messageId);
+            Console.WriteLine("Guild settings message found.");
+        }
+        catch
+        {
+            fetchedMessage = await BotData.HandleMissingSettings(guildId);
+        }
+
+        BotData.Current.LoadGuildSettingsFromMessage(fetchedMessage.Content, guildId);
+        await BotData.Current.InitializeGuild(guildId);
+    }
+    
     await Task.CompletedTask; 
 };
 
-client.MessageCreate += message =>
-{
-    Console.WriteLine("Hi from guild: " + message.GuildId + "\nHi from channel: " + message.ChannelId + "\nHi from message: " + message.Id);
-    return default;
-};
 
 await appService.RegisterCommandsAsync(client.Rest, client.Id);
 

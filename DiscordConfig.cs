@@ -6,6 +6,7 @@ public static class DiscordConfig
     public static ulong GuildId { get; private set; }
     public static ulong ChannelId { get; private set; }
     public static ulong MessageId { get; private set; }
+    public static ulong BotId { get; private set; }
 
     public static void Initialize(IConfiguration config)
     {
@@ -27,5 +28,10 @@ public static class DiscordConfig
             config["MESSAGE_ID"]
             ?? config["DISCORD:MESSAGE_ID"]
             ?? throw new InvalidOperationException("Message ID not configured"));
+
+        BotId = ulong.Parse(
+            config["BOT_ID"]
+            ?? config["DISCORD:BOT_ID"]
+            ?? throw new InvalidOperationException("Bot ID not configured"));
     }
 }
