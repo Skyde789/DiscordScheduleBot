@@ -31,8 +31,6 @@ GatewayClient client = new(
     }
 );
 
-BotData.Initialize();
-
 ApplicationCommandService<ApplicationCommandContext> appService = new();
 appService.AddModule<RaidPlannerModule>();
 
@@ -83,7 +81,7 @@ client.Ready += async _ =>
         ulong guildId = guild.Id;
         Console.WriteLine("Checking settings for: " + guildId);
 
-        BotData.Current.InitializeGuild(guildId);
+        Database.Instance.InitializeGuild(guildId);
     }
 
     await Task.CompletedTask; 
